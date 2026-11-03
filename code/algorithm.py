@@ -3,6 +3,10 @@ import os
 import numpy as np
 import pandas as pd
 
+JOERN_BIN_DIR = "C:\\Program Files (x86)\\joern-cli"
+JOERN_PARSE = os.path.join(JOERN_BIN_DIR, "joern-parse.bat")
+JOERN_EXPORT = os.path.join(JOERN_BIN_DIR, "joern-export.bat")
+
 class Vul2ImageConverter:
     def __init__(self, max_lines=64):
         """
@@ -34,19 +38,36 @@ class Vul2ImageConverter:
             
         return matrix
 
-    def _dependency_to_matrix(self, dependencies):
+    def _dependency_to_matrix(self, dependencies, lines):
         """
         Helper to build n x n adjacency matrices for Control or Data dependencies.
         :param dependencies: List of tuples representing edges (line_i, line_j, weight)
         """
         matrix = np.zeros((self.max_lines, self.max_lines), dtype=np.float32)
+        n = min(len(lines), self.max_lines)
         
-        for u, v, weight in dependencies:
-            if u < self.max_lines and v < self.max_lines:
-                # Scale connection weight to 255
-                matrix[u, v] = float(weight) * 255.0
-                matrix[v, u] = float(weight) * 255.0  # Symmetric mapping
-                
+        # Input is a Pandas DataFrame from Joern CSV
+        if isinstance(dependencies, pd.DataFrame) and not dependencies.empty:
+            for _, row in dependencies.iterrows():
+                try:
+                    u = int(row.get('startLine', row.get('source_line', 0))) - 1
+                    v = int(row.get('endLine', row.get('target_line', 0))) - 1
+                    weight = float(row.get('weight', 1.0))
+                    if 0 <= u < n and 0 <= v < n:
+                        matrix[u, v] = weight * 255.0
+                        matrix[v, u] = weight * 255.0
+                except (ValueError, TypeError):
+                    continue
+                    
+        # Input is a list of tuples (u, v, weight)
+        elif isinstance(dependencies, list):
+            for item in dependencies:
+                if len(item) == 3:
+                    u, v, weight = item
+                    if 0 <= u < n and 0 <= v < n:
+                        matrix[u, v] = float(weight) * 255.0
+                        matrix[v, u] = float(weight) * 255.0
+                        
         return matrix
 
     def convert(self, code_lines, control_dependencies, data_dependencies):
@@ -59,10 +80,10 @@ class Vul2ImageConverter:
         :return: Numpy array of shape (3, max_lines, max_lines) representing the RGB image.
         """
         # Red Channel: Control Dependency Graph (CDG) Matrix
-        red_channel = self._dependency_to_matrix(control_dependencies)
+        red_channel = self._dependency_to_matrix(control_dependencies, code_lines)
 
         # Green Channel: Data Dependency Graph (DDG) Matrix
-        green_channel = self._dependency_to_matrix(data_dependencies)
+        green_channel = self._dependency_to_matrix(data_dependencies, code_lines)
 
         # Blue Channel: Code Text / Semantic Feature Matrix
         blue_channel = self._text_to_feature_matrix(code_lines)
@@ -90,17 +111,31 @@ def joernPipeline(source):
     
     :param source: the source file for detection
     """
-    parse = subprocess.run(["joern-parse", source], capture_output=True, text=True)
+    cmd = [JOERN_PARSE, source, "-o", "cpg.bin"]
+    parse = subprocess.run(cmd, capture_output=True, text=True, shell=True)
 
-    if parse != 0:
-        print("[-] Error running joern-parse:", parse.stderr)
+    if parse.stdout:
+        print("[Joern STDOUT]:", parse.stdout)
+    if parse.stderr:
+        print("[Joern STDERR]:", parse.stderr)
+        
+    if parse.returncode != 0:
+        print(f"[-] Joern parsing failed with exit code {parse.returncode}")
         return False
 
     print("[+] Parsing complete. CPG generated successfully.")
+    
+    # Export Control Dependency Graph (CDG)
+    subprocess.run([JOERN_EXPORT, "--repr", "cdg", "--format", "csv", "--out", "export_cdg"], capture_output=True, text=True, shell=True)
+    
+    # Export Data Dependency Graph (DDG)
+    subprocess.run([JOERN_EXPORT, "--repr", "ddg", "--format", "csv", "--out", "export_ddg"], capture_output=True, text=True, shell=True)
+    
+    print("[+] Joern export complete!")
     return True
 
 if __name__ == "__main__":
-    file = "vulnerable_sample.c"
+    file = "vul2image/test/vulnerable.c"
 
     if not os.path.exists(file):
         print(f"[-] Error: {file} not found.")
@@ -110,17 +145,18 @@ if __name__ == "__main__":
 
     if success:
         #Read the file
-        with open(file, 'r', encoding='utf-8', errors='ignore') as f:
-            lines = [line.rstrip('\n').rstrip('\r') for line in f.readlines()]
+        lines = read_sourceFile(file)
+        cdg_path = os.path.join("export_cdg", "edges.csv")
+        ddg_path = os.path.join("export_ddg", "edges.csv")
         try:
             # Extract CDG and DDG from joern csv files
-            cdg = pd.read_csv("joern_cdg_edges.csv")
-            ddg = pd.read_csv("joern_cdg_edges.csv")
+            cdg = pd.read_csv(cdg_path) if os.path.exists(cdg_path) else pd.DataFrame(columns=['startLine', 'endLine', 'weight'])
+            ddg = pd.read_csv(ddg_path) if os.path.exists(ddg_path) else pd.DataFrame(columns=['startLine', 'endLine', 'weight'])
 
         except FileNotFoundError:
             print("[-] Dependency CSVs not found yet. Make sure your export step generated them.")
-            cdg_df = pd.DataFrame(columns=['source_line', 'target_line', 'weight'])
-            ddg_df = pd.DataFrame(columns=['source_line', 'target_line', 'weight'])
+            cdg = pd.DataFrame()
+            ddg = pd.DataFrame()
         
         converter = Vul2ImageConverter(max_lines=64)
         rgbImage = converter.convert(lines, cdg, ddg)
@@ -128,5 +164,5 @@ if __name__ == "__main__":
         print("--- Automated Vul2Image Pipeline Finished ---")
         print(f"Final Image Tensor Shape (C, H, W): {rgbImage.shape}")
         
-        # Save output for CNN model
+        # Save output for CNN
         np.save("vulnerabilitesImg.npy", rgbImage)
