@@ -1,4 +1,7 @@
+import subprocess
+import os
 import numpy as np
+import pandas as pd
 
 class Vul2ImageConverter:
     def __init__(self, max_lines=64):
@@ -69,43 +72,61 @@ class Vul2ImageConverter:
 
         return rgb_tensor
 
+def read_sourceFile(file_path):
+    """
+    Reads a source code file from disk line by line
+    
+    :param file_path: the path of the C/C++ source file
+    :return: Lines of code without whitespace or newlines
+    """
+    with open(file_path, 'r', encoding = 'utf-8', errors='ignore') as f:
+        code_lines = [line.rstrip('\n').rstrip('\r') for line in f.readlines()]
+    return code_lines
+
+def joernPipeline(source):
+    """
+    Automatically triggers Joern commands from inside Python.
+    This helps us parsing the file for extracting CDG and DDG of the source code
+    
+    :param source: the source file for detection
+    """
+    parse = subprocess.run(["joern-parse", source], capture_output=True, text=True)
+
+    if parse != 0:
+        print("[-] Error running joern-parse:", parse.stderr)
+        return False
+
+    print("[+] Parsing complete. CPG generated successfully.")
+    return True
 
 if __name__ == "__main__":
-    #This is only an example of a code snippet, nothing more
-    vulnerable_code_snippet = [
-        "void process_input(char *input) {",
-        "    char buffer[16];",
-        "    if (strlen(input) > 16) {",
-        "        strcpy(buffer, input);",  # Vulnerability: Potential buffer overflow
-        "    }",
-        "}"
-    ]
-    
-    # Mock Control Dependencies (CDG)
-    control_edges = [
-        (2, 3, 1.0),
-        (2, 4, 1.0)
-    ]
-    
-    # Mock Data Dependencies (DDG)
-    # Variables flowing between lines (e.g., 'input' used in strlen and strcpy)
-    data_edges = [
-        (0, 2, 1.0),  # 'input' parameter passed into 'if' condition
-        (0, 3, 1.0),  # 'input' parameter passed into 'strcpy'
-        (1, 3, 1.0)   # 'buffer' declaration interacts with 'strcpy' target
-    ]
-    
-    converter = Vul2ImageConverter(max_lines=32)
-    
-    # Generate the RGB image tensor
-    rgb_image_tensor = converter.convert(
-        code_lines=vulnerable_code_snippet,
-        control_dependencies=control_edges,
-        data_dependencies=data_edges
-    )
-    
-    print("--- Vul2Image Conversion Complete ---")
-    print(f"Output Tensor Shape (C, H, W): {rgb_image_tensor.shape}")
-    print(f"Red Channel (Control Flow) max value: {rgb_image_tensor[0].max():.2f}")
-    print(f"Green Channel (Data Flow) max value: {rgb_image_tensor[1].max():.2f}")
-    print(f"Blue Channel (Text Features) max value: {rgb_image_tensor[2].max():.2f}")
+    file = "vulnerable_sample.c"
+
+    if not os.path.exists(file):
+        print(f"[-] Error: {file} not found.")
+        exit(1)
+
+    success = joernPipeline(file)
+
+    if success:
+        #Read the file
+        with open(file, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = [line.rstrip('\n').rstrip('\r') for line in f.readlines()]
+        try:
+            # Extract CDG and DDG from joern csv files
+            cdg = pd.read_csv("joern_cdg_edges.csv")
+            ddg = pd.read_csv("joern_cdg_edges.csv")
+
+        except FileNotFoundError:
+            print("[-] Dependency CSVs not found yet. Make sure your export step generated them.")
+            cdg_df = pd.DataFrame(columns=['source_line', 'target_line', 'weight'])
+            ddg_df = pd.DataFrame(columns=['source_line', 'target_line', 'weight'])
+        
+        converter = Vul2ImageConverter(max_lines=64)
+        rgbImage = converter.convert(lines, cdg, ddg)
+
+        print("--- Automated Vul2Image Pipeline Finished ---")
+        print(f"Final Image Tensor Shape (C, H, W): {rgbImage.shape}")
+        
+        # Save output for CNN model
+        np.save("vul2image_tensor.npy", rgbImage)
