@@ -129,4 +129,4 @@ if __name__ == "__main__":
         print(f"Final Image Tensor Shape (C, H, W): {rgbImage.shape}")
         
         # Save output for CNN model
-        np.save("vul2image_tensor.npy", rgbImage)
+        np.save("vulnerabilitesImg.npy", rgbImage)
