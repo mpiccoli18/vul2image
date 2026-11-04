@@ -16,7 +16,7 @@ plt.imshow(img_array)
 plt.title("Vul2Image Source Code Representation\n(Red: Control Flow | Green: Data Flow | Blue: Text)", fontsize=10)
 plt.axis("off")
 
-plt.savefig("vul2imaqge.png", bbox_inches='tight', dpi=300)
+plt.savefig("vul2image.png", bbox_inches='tight', dpi=300)
 print("Saved visualization as 'vul2image.png'")
 
 plt.show()
