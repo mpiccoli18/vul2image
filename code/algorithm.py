@@ -1,5 +1,7 @@
 import subprocess
 import os
+import re
+import shutil
 import numpy as np
 import pandas as pd
 
@@ -45,28 +47,18 @@ class Vul2ImageConverter:
         """
         matrix = np.zeros((self.max_lines, self.max_lines), dtype=np.float32)
         n = min(len(lines), self.max_lines)
-        
-        # Input is a Pandas DataFrame from Joern CSV
-        if isinstance(dependencies, pd.DataFrame) and not dependencies.empty:
-            for _, row in dependencies.iterrows():
-                try:
-                    u = int(row.get('startLine', row.get('source_line', 0))) - 1
-                    v = int(row.get('endLine', row.get('target_line', 0))) - 1
-                    weight = float(row.get('weight', 1.0))
-                    if 0 <= u < n and 0 <= v < n:
-                        matrix[u, v] = weight * 255.0
-                        matrix[v, u] = weight * 255.0
-                except (ValueError, TypeError):
-                    continue
                     
         # Input is a list of tuples (u, v, weight)
-        elif isinstance(dependencies, list):
+        if isinstance(dependencies, list):
             for item in dependencies:
                 if len(item) == 3:
                     u, v, weight = item
-                    if 0 <= u < n and 0 <= v < n:
-                        matrix[u, v] = float(weight) * 255.0
-                        matrix[v, u] = float(weight) * 255.0
+                    # Convert 1-based Joern line numbers to 0-based Python indices
+                    u_idx = int(u) - 1
+                    v_idx = int(v) - 1
+                    if 0 <= u_idx < n and 0 <= v_idx < n:
+                        matrix[u_idx, v_idx] = float(weight) * 255.0
+                        matrix[v_idx, u_idx] = float(weight) * 255.0
                         
         return matrix
 
@@ -79,6 +71,7 @@ class Vul2ImageConverter:
         :param data_dependencies: Edges representing data flow (e.g., variable usage). Format: [(u, v, weight), ...]
         :return: Numpy array of shape (3, max_lines, max_lines) representing the RGB image.
         """
+        
         # Red Channel: Control Dependency Graph (CDG) Matrix
         red_channel = self._dependency_to_matrix(control_dependencies, code_lines)
 
@@ -104,6 +97,47 @@ def read_sourceFile(file_path):
         code_lines = [line.rstrip('\n').rstrip('\r') for line in f.readlines()]
     return code_lines
 
+def parseDotFiles(dot):
+    """
+    Parses all Joern-exported .dot files in a directory to extract line-to-line dependency edges (line_i, line_y, weight)
+
+    :param dot: the path of the directory containing the .dot files
+    :return: the edges of each graph
+    """
+    edges = []
+
+    if not os.path.exists(dot):
+        print(f"[-] Error: {dot} not found.")
+        return edges
+
+    for filename in os.listdir(dot):
+         if filename.endswith(".dot"):
+                filepath = os.path.join(dot, filename)
+                node_lines = {}
+
+                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                   content = f.read()
+
+                node_matches = re.findall(r'"([^"]+)"\s*\[(.*?)\]', content, re.DOTALL)
+                for node_id, attrs in node_matches:
+                        node_id = node_id.strip()
+                        line_match = re.search(r'(?:,\s*|)(\d+)<BR/>', attrs)
+                        if line_match:
+                            node_lines[node_id] = int(line_match.group(1))
+                    
+                #Extract edges connecting nodes: "node1" -> "node2"
+                edge_matches = re.findall(r'"([^"]+)"\s*->\s*"([^"]+)"', content)
+                for src, dst in edge_matches:
+                        src = src.strip()
+                        dst = dst.strip()
+                        
+                        # Map node IDs to actual source code line numbers
+                        if src in node_lines and dst in node_lines:
+                            edges.append((node_lines[src], node_lines[dst], 1.0))
+                        
+    return edges
+
+
 def joernPipeline(source):
     """
     Automatically triggers Joern commands from inside Python.
@@ -111,6 +145,14 @@ def joernPipeline(source):
     
     :param source: the source file for detection
     """
+    for export_dir in ["export_cdg", "export_ddg"]:
+        if os.path.exists(export_dir):
+            try:
+                shutil.rmtree(export_dir)
+                print(f"[*] Cleared old directory: {export_dir}")
+            except Exception as e:
+                print(f"[-] Warning: Could not delete {export_dir}: {e}")
+    
     cmd = [JOERN_PARSE, source, "-o", "cpg.bin"]
     parse = subprocess.run(cmd, capture_output=True, text=True, shell=True)
 
@@ -126,16 +168,33 @@ def joernPipeline(source):
     print("[+] Parsing complete. CPG generated successfully.")
     
     # Export Control Dependency Graph (CDG)
-    subprocess.run([JOERN_EXPORT, "--repr", "cdg", "--format", "csv", "--out", "export_cdg"], capture_output=True, text=True, shell=True)
+    parse = subprocess.run([JOERN_EXPORT, "cpg.bin", "--repr", "cdg", "--format", "dot", "--out", "export_cdg"], capture_output=True, text=True, shell=True)
+    if parse.stdout:
+            print("[Joern STDOUT]:", parse.stdout)
+    if parse.stderr:
+            print("[Joern STDERR]:", parse.stderr)
+            
+    if parse.returncode != 0:
+            print(f"[-] Joern parsing failed with exit code {parse.returncode}")
+            return False
     
     # Export Data Dependency Graph (DDG)
-    subprocess.run([JOERN_EXPORT, "--repr", "ddg", "--format", "csv", "--out", "export_ddg"], capture_output=True, text=True, shell=True)
+    parse = subprocess.run([JOERN_EXPORT, "cpg.bin", "--repr", "ddg", "--format", "dot", "--out", "export_ddg"], capture_output=True, text=True, shell=True)
+
+    if parse.stdout:
+            print("[Joern STDOUT]:", parse.stdout)
+    if parse.stderr:
+            print("[Joern STDERR]:", parse.stderr)
+            
+    if parse.returncode != 0:
+            print(f"[-] Joern parsing failed with exit code {parse.returncode}")
+            return False
     
     print("[+] Joern export complete!")
     return True
 
 if __name__ == "__main__":
-    file = "vul2image/test/vulnerable.c"
+    file = "test/vulnerable.c"
 
     if not os.path.exists(file):
         print(f"[-] Error: {file} not found.")
@@ -146,23 +205,17 @@ if __name__ == "__main__":
     if success:
         #Read the file
         lines = read_sourceFile(file)
-        cdg_path = os.path.join("export_cdg", "edges.csv")
-        ddg_path = os.path.join("export_ddg", "edges.csv")
-        try:
-            # Extract CDG and DDG from joern csv files
-            cdg = pd.read_csv(cdg_path) if os.path.exists(cdg_path) else pd.DataFrame(columns=['startLine', 'endLine', 'weight'])
-            ddg = pd.read_csv(ddg_path) if os.path.exists(ddg_path) else pd.DataFrame(columns=['startLine', 'endLine', 'weight'])
-
-        except FileNotFoundError:
-            print("[-] Dependency CSVs not found yet. Make sure your export step generated them.")
-            cdg = pd.DataFrame()
-            ddg = pd.DataFrame()
+        cdg_edges = parseDotFiles("export_cdg")
+        ddg_edges = parseDotFiles("export_ddg")
+        print(f"[+] Extracted {len(cdg_edges)} Control Dependency edges (CDG).")
+        print(f"[+] Extracted {len(ddg_edges)} Data Dependency edges (DDG).")
         
         converter = Vul2ImageConverter(max_lines=64)
-        rgbImage = converter.convert(lines, cdg, ddg)
+        rgbImage = converter.convert(lines, cdg_edges, ddg_edges)
 
         print("--- Automated Vul2Image Pipeline Finished ---")
         print(f"Final Image Tensor Shape (C, H, W): {rgbImage.shape}")
         
         # Save output for CNN
         np.save("vulnerabilitesImg.npy", rgbImage)
+        

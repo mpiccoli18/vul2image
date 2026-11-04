@@ -1,2 +1,5 @@
 *.bin
 *.npy
+.vscode
+export_cdg
+export_ddg
