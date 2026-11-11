@@ -1,5 +1,6 @@
 import os
 import numpy as np 
+import shutil
 from algorithm import read_sourceFile, parseDotFiles, Vul2ImageConverter, joernPipeline
 
 def process_dataset(datasetRoot, outputNpyDir, max_lines=64):
@@ -9,21 +10,34 @@ def process_dataset(datasetRoot, outputNpyDir, max_lines=64):
     runs the Joern pipeline on every .c file, and saves unique .npy tensors.
     """
 
-    os.makedirs(outputNpyDir)
+    
+    if os.path.exists(outputNpyDir):
+        try:
+            shutil.rmtree(outputNpyDir)
+            print(f"[*] Cleared old directory: {outputNpyDir}")
+            os.makedirs(outputNpyDir)
+        except Exception as e:
+            print(f"[-] Warning: Could not delete {outputNpyDir}: {e}")
+    else:
+        os.makedirs(outputNpyDir)
+    
     converter = Vul2ImageConverter(max_lines=max_lines)
 
-    success = 0
+    success_idx = 0
     fail = 0
 
     print(f"[*] Scanning dataset directory: {datasetRoot}")
 
     for root, dirs, files in os.walk(datasetRoot):
         for file in files:
-            if file.endswith(".c"):
+            if file.endswith(".c") or file.endswith(".cpp"):
                 cFile = os.path.join(root, file)
 
                 relativePath = os.path.relpath(cFile, datasetRoot)
-                uniquePre = relativePath.replace(os.sep, "_").replace(".c", "")
+                if file.endswith(".c"):
+                    uniquePre = relativePath.replace(os.sep, "_").replace(".c", "")
+                else:
+                    uniquePre = relativePath.replace(os.sep, "_").replace(".cpp", "")
 
                 print(f"\n----------------------------------------")
                 print(f"Processing: {relativePath}")
@@ -47,12 +61,11 @@ def process_dataset(datasetRoot, outputNpyDir, max_lines=64):
 
                     np.save(npyPath, rgb_image)
                     print(f"[+] Saved tensor shape {rgb_image.shape} to: {npyPath}")
-                    success += 1
+                    success_idx += 1
 
                 except Exception as e:
                     print(f"[-] Error processing {relativePath}: {e}")
                     fail += 1
-
 
     print("\n========================================")
     print(" Dataset Batch Processing Summary")
@@ -62,7 +75,7 @@ def process_dataset(datasetRoot, outputNpyDir, max_lines=64):
 
 
 if __name__ == "__main__":
-    DATASET_ROOT = "test/C/testcases"
+    DATASET_ROOT = "test/C/testcases/CWE15_External_Control_of_System_or_Configuration_Setting"
     
     # Folder where all .npy tensors are stored
     OUTPUT_NPY_DIR = "test/dataset_output"

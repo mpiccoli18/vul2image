@@ -5,4 +5,4 @@ export_cdg
 export_ddg
 test/C
 test/dataset_output
-test/plot_output
+code/__pycache__

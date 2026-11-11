@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import shutil
 import matplotlib.pyplot as plt
 
 
@@ -13,6 +14,16 @@ def convertAll(inputNpyDir, outputPlotDir):
     if not os.path.exists(inputNpyDir):
         print(f"[-] Directory '{inputNpyDir}' not found. Make sure you generated your tensors first!")
         return
+
+    if os.path.exists(outputPlotDir):
+        try:
+            shutil.rmtree(outputPlotDir)
+            print(f"[*] Cleared old directory: {outputPlotDir}")
+            os.makedirs(outputPlotDir)
+        except Exception as e:
+            print(f"[-] Warning: Could not delete {outputPlotDir}: {e}")
+    else:
+        os.makedirs(outputPlotDir)
 
     npyFiles = [f for f in os.listdir(inputNpyDir) if f.endswith(".npy")]
     print(f"[*] Found {len(npyFiles)} tensor files to plot in '{inputNpyDir}'.")
