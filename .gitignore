@@ -1,6 +1,7 @@
 *.bin
 *.npy
 .vscode
+*.csv
 export_cdg
 export_ddg
 test/C
