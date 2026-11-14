@@ -33,7 +33,7 @@ def load_dataset(csv):
 
 
 
-def process_dataset(df, outputNpyDir, max_samples=100):
+def process_dataset(df, outputNpyDir, max_samples=20):
 
     """
     Processes the entire csv dataset file by looping inside with row and columns.
@@ -51,7 +51,10 @@ def process_dataset(df, outputNpyDir, max_samples=100):
     else:
         os.makedirs(outputNpyDir)
 
-    dfSub = df.head(max_samples)
+    dfVul = df[pd.to_numeric(df['vul'], errors='coerce') == 1.0]
+    print(f"[+] Found {len(dfVul)} vulnerable samples out of {len(df)} total rows.")
+    
+    dfSub = dfVul.head(max_samples)
     converter = Vul2ImageConverter(max_lines=64)
 
     for index, row in dfSub.iterrows():
@@ -62,7 +65,7 @@ def process_dataset(df, outputNpyDir, max_samples=100):
             continue
 
         # Writing the dataframe's string code into a tmp file
-        tmp_filename = f"tmp_sample_{index}"
+        tmp_filename = f"tmp_sample_{index}.c"
         with open(tmp_filename, "w", encoding="utf-8") as f:
             f.write(source)
 
@@ -82,8 +85,8 @@ def process_dataset(df, outputNpyDir, max_samples=100):
 
             rgbImage = converter.convert(lines, cdg, ddg)
 
-            label = 1 if label == "1" else "0"
-            npyName = "bigVul_" + f"idx_{index}_vul_{label}.npy"
+            label_idx = 1 if label == "1" else "0"
+            npyName = "bigVul_" + f"idx_{index}_vul_{label_idx}.npy"
             np.save(os.path.join(outputNpyDir, npyName), rgbImage)
 
             print(f"[+] Saved tensor: {npyName}")
@@ -123,9 +126,11 @@ def download_dataset():
 
 if __name__ == "__main__":
 
+    # File path where the dataset is located
     DATASET_ROOT = "MSR_data_cleaned.csv"
+    
     # Folder where all .npy tensors are stored
-    OUTPUT_NPY_DIR = "test/dataset_output"
+    OUTPUT_NPY_DIR = "output/dataset_output"
     
     download_dataset()
     
@@ -135,5 +140,3 @@ if __name__ == "__main__":
         process_dataset(df, OUTPUT_NPY_DIR)
     else:
         print("[-] Aborting process because the dataset failed to load.")
-    
-    process_dataset(df, OUTPUT_NPY_DIR)

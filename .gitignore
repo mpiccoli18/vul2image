@@ -4,6 +4,5 @@
 *.csv
 export_cdg
 export_ddg
-test/C
-test/dataset_output
+output/dataset_output
 code/__pycache__
