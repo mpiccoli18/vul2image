@@ -85,8 +85,9 @@ def process_dataset(df, outputNpyDir, max_samples=20):
 
             rgbImage = converter.convert(lines, cdg, ddg)
 
-            label_idx = 1 if label == "1" else "0"
+            label_idx = int(float(label)) if not pd.isna(label) else 1
             npyName = "bigVul_" + f"idx_{index}_vul_{label_idx}.npy"
+            
             np.save(os.path.join(outputNpyDir, npyName), rgbImage)
 
             print(f"[+] Saved tensor: {npyName}")

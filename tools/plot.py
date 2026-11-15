@@ -64,4 +64,4 @@ def convertAll(inputNpyDir, outputPlotDir):
 
 
 if __name__ == "__main__":
-    convertAll("test/dataset_output", "test/plot_output")
+    convertAll("output/dataset_output", "output/plot_output")
