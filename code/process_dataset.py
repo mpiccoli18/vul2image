@@ -20,7 +20,7 @@ def load_dataset(csv):
 
     try:
         # engine='python' safely handles complex multi-line strings and messy quotes in source code
-        # on_bad_lines='skip' ensures a malformed row doesn't crash your entire script
+        # on_bad_lines='skip' ensures a malformed row doesn't crash the script
         df = pd.read_csv(csv, engine="python", on_bad_lines='skip')
         
         print(f"[+] Successfully loaded {len(df)} rows.")
