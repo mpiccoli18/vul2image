@@ -54,7 +54,7 @@ def process_dataset(df, outputNpyDir, max_samples=20):
     dfVul = df[pd.to_numeric(df['vul'], errors='coerce') == 1.0]
     print(f"[+] Found {len(dfVul)} vulnerable samples out of {len(df)} total rows.")
     
-    dfSub = dfVul.head(max_samples)
+    dfSub = df.head(max_samples)
     converter = Vul2ImageConverter(max_lines=64)
 
     for index, row in dfSub.iterrows():
