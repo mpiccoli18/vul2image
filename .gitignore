@@ -6,3 +6,5 @@ export_cdg
 export_ddg
 output/dataset_output
 code/__pycache__
+joern-cli
+out

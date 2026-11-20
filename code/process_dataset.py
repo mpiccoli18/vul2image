@@ -33,7 +33,7 @@ def load_dataset(csv):
 
 
 
-def process_dataset(df, outputNpyDir, max_samples=20):
+def process_dataset(df, outputNpyDir, max_samples=1000):
 
     """
     Processes the entire csv dataset file by looping inside with row and columns.

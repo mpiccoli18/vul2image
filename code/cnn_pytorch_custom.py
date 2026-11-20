@@ -98,7 +98,7 @@ def train_model(model, X_train, Y_train, batch_size, epochs):
         running_loss = 0.0
         for inputs, labels in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}"):
             inputs, labels = inputs.to(device), labels.to(device)
-            inputs = inputs.permute(0, 3, 1, 2)
+            #inputs = inputs.permute(0, 3, 1, 2)
             optimizer.zero_grad()
             outputs = model(inputs)
             _, predicted = torch.max(outputs, 1)
@@ -131,7 +131,7 @@ def evaluate_model(model, X_test, Y_true, eval_batch_size):
     with torch.no_grad():
         for inputs, labels in test_loader:
             inputs, labels = inputs.to(device), labels.to(device)
-            inputs = inputs.permute(0, 3, 1, 2)
+            #inputs = inputs.permute(0, 3, 1, 2)
             outputs = model(inputs)
             _, predicted = torch.max(outputs, 1)
             cm = confusion_matrix(labels.cpu(), predicted.cpu())
@@ -246,7 +246,7 @@ def main(TrainFilePath):
 
 if __name__=='__main__':
 
-    device = torch.device("cuda")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     cost_time = main(TrainFilePath)
 
     print("-----final-----")

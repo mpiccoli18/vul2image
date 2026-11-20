@@ -1,0 +1,30 @@
+Loading Python/3.9.5-GCCcore-10.3.0
+  Loading requirement: GCCcore/10.3.0 zlib/1.2.11-GCCcore-10.3.0
+    binutils/2.36.1-GCCcore-10.3.0 bzip2/1.0.8-GCCcore-10.3.0
+    ncurses/6.2-GCCcore-10.3.0 libreadline/8.1-GCCcore-10.3.0
+    Tcl/8.6.11-GCCcore-10.3.0 SQLite/3.35.4-GCCcore-10.3.0
+    XZ/5.2.5-GCCcore-10.3.0 GMP/6.2.1-GCCcore-10.3.0 libffi/3.3-GCCcore-10.3.0
+    OpenSSL/1.1
+Epoch 1/100:   0%|          | 0/4 [00:00<?, ?it/s]Epoch 1/100:   0%|          | 0/4 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/marco.piccoli/vul2image/./code/cnn_pytorch_custom.py", line 250, in <module>
+    cost_time = main(TrainFilePath)
+  File "/home/marco.piccoli/vul2image/./code/cnn_pytorch_custom.py", line 238, in main
+    train_model(model, X_train_tensor, Y_train_tensor, train_batch_size, num_epochs)
+  File "/home/marco.piccoli/vul2image/./code/cnn_pytorch_custom.py", line 103, in train_model
+    outputs = model(inputs)
+  File "/home/marco.piccoli/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/marco.piccoli/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/marco.piccoli/vul2image/./code/cnn_pytorch_custom.py", line 57, in forward
+    x = F.relu(self.conv1(x))
+  File "/home/marco.piccoli/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/marco.piccoli/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/marco.piccoli/.local/lib/python3.9/site-packages/torch/nn/modules/conv.py", line 548, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+  File "/home/marco.piccoli/.local/lib/python3.9/site-packages/torch/nn/modules/conv.py", line 543, in _conv_forward
+    return F.conv2d(
+RuntimeError: Given groups=1, weight of size [32, 3, 3, 3], expected input[256, 64, 3, 64] to have 3 channels, but got 64 channels instead

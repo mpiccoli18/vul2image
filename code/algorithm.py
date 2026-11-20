@@ -5,9 +5,9 @@ import shutil
 import numpy as np
 import pandas as pd
 
-JOERN_BIN_DIR = "C:\\Program Files (x86)\\joern-cli"
-JOERN_PARSE = os.path.join(JOERN_BIN_DIR, "joern-parse.bat")
-JOERN_EXPORT = os.path.join(JOERN_BIN_DIR, "joern-export.bat")
+JOERN_BIN_DIR = "joern-cli"                                         # HAS TO BE CHANGED TO THE CORRECT PATH 
+JOERN_PARSE = os.path.join(JOERN_BIN_DIR, "joern-parse")            # Joern-parse.bat if on Windows
+JOERN_EXPORT = os.path.join(JOERN_BIN_DIR, "joern-export")          # Joern-export.bat if on Windows
 
 class Vul2ImageConverter:
     def __init__(self, max_lines=64):
@@ -154,7 +154,7 @@ def joernPipeline(source):
                 print(f"[-] Warning: Could not delete {export_dir}: {e}")
     
     cmd = [JOERN_PARSE, source, "-o", "cpg.bin"]
-    parse = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+    parse = subprocess.run(cmd, capture_output=True, text=True, shell=False) # Shell = False on Linux, Shell = True on Windows
 
     if parse.stdout:
         print("[Joern STDOUT]:", parse.stdout)
@@ -168,7 +168,7 @@ def joernPipeline(source):
     print("[+] Parsing complete. CPG generated successfully.")
     
     # Export Control Dependency Graph (CDG)
-    parse = subprocess.run([JOERN_EXPORT, "cpg.bin", "--repr", "cdg", "--format", "dot", "--out", "export_cdg"], capture_output=True, text=True, shell=True)
+    parse = subprocess.run([JOERN_EXPORT, "cpg.bin", "--repr", "cdg", "--format", "dot", "--out", "export_cdg"], capture_output=True, text=True, shell=False)
     if parse.stdout:
             print("[Joern STDOUT]:", parse.stdout)
     if parse.stderr:
@@ -179,7 +179,7 @@ def joernPipeline(source):
             return False
     
     # Export Data Dependency Graph (DDG)
-    parse = subprocess.run([JOERN_EXPORT, "cpg.bin", "--repr", "ddg", "--format", "dot", "--out", "export_ddg"], capture_output=True, text=True, shell=True)
+    parse = subprocess.run([JOERN_EXPORT, "cpg.bin", "--repr", "ddg", "--format", "dot", "--out", "export_ddg"], capture_output=True, text=True, shell=False)
 
     if parse.stdout:
             print("[Joern STDOUT]:", parse.stdout)
