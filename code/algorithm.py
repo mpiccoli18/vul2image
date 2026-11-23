@@ -5,9 +5,9 @@ import shutil
 import numpy as np
 import pandas as pd
 
-JOERN_BIN_DIR = "joern-cli"                                         # HAS TO BE CHANGED TO THE CORRECT PATH 
-JOERN_PARSE = os.path.join(JOERN_BIN_DIR, "joern-parse")            # Joern-parse.bat if on Windows
-JOERN_EXPORT = os.path.join(JOERN_BIN_DIR, "joern-export")          # Joern-export.bat if on Windows
+JOERN_BIN_DIR = os.path.abspath(os.path.expanduser("~/vul2image/joern-cli"))    # HAS TO BE CHANGED TO THE CORRECT PATH 
+JOERN_PARSE = os.path.join(JOERN_BIN_DIR, "joern-parse")                        # Joern-parse.bat if on Windows
+JOERN_EXPORT = os.path.join(JOERN_BIN_DIR, "joern-export")                      # Joern-export.bat if on Windows
 
 class Vul2ImageConverter:
     def __init__(self, max_lines=64):
@@ -138,23 +138,39 @@ def parseDotFiles(dot):
     return edges
 
 
-def joernPipeline(source):
+def joernPipeline(source, workDir="."):
     """
     Automatically triggers Joern commands from inside Python.
     This helps us parsing the file for extracting CDG and DDG of the source code
     
     :param source: the source file for detection
     """
-    for export_dir in ["export_cdg", "export_ddg"]:
-        if os.path.exists(export_dir):
-            try:
-                shutil.rmtree(export_dir)
-                print(f"[*] Cleared old directory: {export_dir}")
-            except Exception as e:
-                print(f"[-] Warning: Could not delete {export_dir}: {e}")
     
-    cmd = [JOERN_PARSE, source, "-o", "cpg.bin"]
-    parse = subprocess.run(cmd, capture_output=True, text=True, shell=False) # Shell = False on Linux, Shell = True on Windows
+    if not os.path.isfile(JOERN_PARSE):
+        raise FileNotFoundError(f"joern-parse not found at: {JOERN_PARSE}")
+    
+    os.makedirs(workDir, exist_ok=True)
+
+    cpgPath = os.path.join(workDir, "cpg.bin")
+    cdgDir = os.path.join(workDir, "export_cdg")
+    ddgDir = os.path.join(workDir, "export_ddg")
+    outDir = os.path.join(workDir, "out")
+    
+    for d in [cdgDir, ddgDir, outDir]:
+        if os.path.exists(d):
+            try:
+                shutil.rmtree(d)
+            except Exception as e:
+                print(f"[-] Warning: Could not delete {d}: {e}")
+
+    if os.path.exists(cpgPath):
+        try:
+            os.remove(cpgPath)
+        except Exception as e:
+            print(f"[-] Warning: Could not delete {cpgPath}: {e}")
+
+    cmd = [JOERN_PARSE, source, "-o", cpgPath]
+    parse = subprocess.run(cmd, cwd=workDir, capture_output=True, text=True, shell=False) # Shell = False on Linux, Shell = True on Windows
 
     if parse.stdout:
         print("[Joern STDOUT]:", parse.stdout)
@@ -163,32 +179,29 @@ def joernPipeline(source):
         
     if parse.returncode != 0:
         print(f"[-] Joern parsing failed with exit code {parse.returncode}")
+        if parse.stderr:
+            print("[Joern STDERR]:", parse.stderr)
         return False
 
     print("[+] Parsing complete. CPG generated successfully.")
     
     # Export Control Dependency Graph (CDG)
-    parse = subprocess.run([JOERN_EXPORT, "cpg.bin", "--repr", "cdg", "--format", "dot", "--out", "export_cdg"], capture_output=True, text=True, shell=False)
-    if parse.stdout:
-            print("[Joern STDOUT]:", parse.stdout)
-    if parse.stderr:
-            print("[Joern STDERR]:", parse.stderr)
-            
+    parse = subprocess.run([JOERN_EXPORT, cpgPath, "--repr", "cdg", "--format", "dot", "--out", cdgDir], cwd=workDir, capture_output=True, text=True, shell=False)
+    
     if parse.returncode != 0:
-            print(f"[-] Joern parsing failed with exit code {parse.returncode}")
-            return False
+        print(f"[-] Joern CDG export failed with exit code {parse.returncode}")
+        if parse.stderr:
+            print("[Joern STDERR]:", parse.stderr)
+        return False
     
     # Export Data Dependency Graph (DDG)
-    parse = subprocess.run([JOERN_EXPORT, "cpg.bin", "--repr", "ddg", "--format", "dot", "--out", "export_ddg"], capture_output=True, text=True, shell=False)
+    parse = subprocess.run([JOERN_EXPORT, cpgPath, "--repr", "ddg", "--format", "dot", "--out", ddgDir], cwd=workDir, capture_output=True, text=True, shell=False)
 
-    if parse.stdout:
-            print("[Joern STDOUT]:", parse.stdout)
-    if parse.stderr:
-            print("[Joern STDERR]:", parse.stderr)
-            
     if parse.returncode != 0:
-            print(f"[-] Joern parsing failed with exit code {parse.returncode}")
-            return False
+        print(f"[-] Joern DDG export failed with exit code {parse.returncode}")
+        if parse.stderr:
+            print("[Joern STDERR]:", parse.stderr)
+        return False
     
     print("[+] Joern export complete!")
     return True

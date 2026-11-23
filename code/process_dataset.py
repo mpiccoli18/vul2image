@@ -4,6 +4,8 @@ import pandas as pd
 import gdown
 import zipfile
 import shutil
+import time
+from multiprocessing import Pool
 from algorithm import read_sourceFile, parseDotFiles, Vul2ImageConverter, joernPipeline
 
 
@@ -32,8 +34,48 @@ def load_dataset(csv):
         return None
 
 
+def process_sample(args):
+    
+    
+    idx, func_before, label_idx, outputNpyDir, baseDir, workers = args
+    workerId = idx % workers
+    workDir = os.path.join(baseDir, f"worker_{workerId}")
+    os.makedirs(workDir, exist_ok=True)
 
-def process_dataset(df, outputNpyDir, max_samples=1000):
+    tmpFile = os.path.join(workDir, f"tmp_sample_{idx}.c")
+    cgdDir = os.path.join(workDir, "export_cdg")
+    ddgDir = os.path.join(workDir, "export_ddg")
+
+    try:
+        with open(tmpFile, "w", encoding="utf-8") as f:
+            f.write(func_before)
+        
+        success = joernPipeline(tmpFile, workDir=workDir)
+        if not success:
+            return False
+
+        converter = Vul2ImageConverter(max_lines=64)
+        lines = read_sourceFile(tmpFile)
+        cdg = parseDotFiles(cdg_dir)
+        ddg = parseDotFiles(ddg_dir)
+
+        rgbImage = converter.convert(lines, cdg, ddg)
+        npyName = f"bigVul_idx_{idx}_vul_{label_idx}.npy"
+        np.save(os.path.join(output_npy_dir, npyName), rgbImage)
+        return True
+
+    except Exception as e:
+        print(f"[-] Error on index {idx}: {e}")
+        return False
+
+    finally:
+        if os.path.exists(tmpFile):
+            try:
+                os.remove(tmpFile)
+            except OSError:
+                pass
+
+def process_dataset(df, outputNpyDir, max_samples=20):
 
     """
     Processes the entire csv dataset file by looping inside with row and columns.
@@ -54,15 +96,60 @@ def process_dataset(df, outputNpyDir, max_samples=1000):
     dfVul = df[pd.to_numeric(df['vul'], errors='coerce') == 1.0]
     print(f"[+] Found {len(dfVul)} vulnerable samples out of {len(df)} total rows.")
     
-    dfSub = df.head(max_samples)
+    valid = df[
+        df["func_before"].notna() &
+        df["func_before"].apply(lambda s: isinstance(s, str) and len(s.strip()) > 0)
+    ].copy()
+    valid["label_idx"] = pd.to_numeric(valid["vul"], errors="coerce").fillna(0).astype(int)
+    valid["label_idx"] = (valid["label_idx"] == 1).astype(int)
+
+    df0 = valid[valid["label_idx"] == 0]
+    df1 = valid[valid["label_idx"] == 1]
+
+    samples = max(1, max_samples // 2)
+    noVul = min(samples, len(df0))
+    vul = min(samples, len(df1))
+
+    sub0 = df0.sample(n=noVul, random_state=42)
+    sub1 = df1.sample(n=vul, random_state=42)
+
     converter = Vul2ImageConverter(max_lines=64)
 
+    dfSub = (
+        pd.concat([sub0, sub1])
+        .sample(frac=1.0, random_state=42)
+        .reset_index(drop=True)
+    )
+    
+    print(f"[+] Selected {len(dfSub)} balanced samples ({noVul} safe, {vul} vulnerable).")
+    
+    workers = 4
+    tmpDir = "/tmp/workers"
+    os.makedirs(tmpDir, exist_ok=True)
+
+    tasks = [
+        (
+            int(row.name),
+            row["func_before"],
+            int(row["label_idx"]),
+            outputNpyDir,
+            tmpDir,
+            workers
+        )
+        for _, row in dfSub.iterrows()
+    ]
+
+    start_t = time.time()
+    with Pool(processes=workers) as pool:
+        results = pool.map(process_sample, tasks)
+    
+    elapsed = time.time() - start_t
+    print(f"[+] Completed {sum(results)}/{len(results)} samples in {elapsed:.1f}s ({workers} workers).")
+    
+    '''
     for index, row in dfSub.iterrows():
         source = row['func_before']
         label = row['vul']
-
-        if pd.isna(source) or not isinstance(source, str):
-            continue
 
         # Writing the dataframe's string code into a tmp file
         tmp_filename = f"tmp_sample_{index}.c"
@@ -99,7 +186,7 @@ def process_dataset(df, outputNpyDir, max_samples=1000):
             # Clean up the temporary .c file from disk
             if os.path.exists(tmp_filename):
                 os.remove(tmp_filename)
-
+    '''
 def download_dataset():
     """
     Download and extract the BigVul dataset if it's not present inside the repo
@@ -133,7 +220,7 @@ if __name__ == "__main__":
     # Folder where all .npy tensors are stored
     OUTPUT_NPY_DIR = "output/dataset_output"
     
-    download_dataset()
+    #download_dataset()             # Only if you don't have downloaded yet BigVul
     
     df = load_dataset(DATASET_ROOT)
     

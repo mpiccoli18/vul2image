@@ -14,7 +14,7 @@ echo "[+] Installing dependencies..."
 
 echo "[+] Beginning Vul2Image Algorithm..."
 
-#python ./code/process_dataset.py
+python ./code/process_dataset.py
 
 echo "[+] Finishing processing Dataset..."
 
