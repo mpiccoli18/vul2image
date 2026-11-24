@@ -36,10 +36,8 @@ def load_dataset(csv):
 
 def process_sample(args):
     
-    
-    idx, func_before, label_idx, outputNpyDir, baseDir, workers = args
-    workerId = idx % workers
-    workDir = os.path.join(baseDir, f"worker_{workerId}")
+    idx, func_before, label_idx, outputNpyDir, baseDir = args
+    workDir = os.path.join(baseDir, f"task_{idx}")
     os.makedirs(workDir, exist_ok=True)
 
     tmpFile = os.path.join(workDir, f"tmp_sample_{idx}.c")
@@ -56,12 +54,12 @@ def process_sample(args):
 
         converter = Vul2ImageConverter(max_lines=64)
         lines = read_sourceFile(tmpFile)
-        cdg = parseDotFiles(cdg_dir)
-        ddg = parseDotFiles(ddg_dir)
+        cdg = parseDotFiles(cgdDir)
+        ddg = parseDotFiles(ddgDir)
 
         rgbImage = converter.convert(lines, cdg, ddg)
         npyName = f"bigVul_idx_{idx}_vul_{label_idx}.npy"
-        np.save(os.path.join(output_npy_dir, npyName), rgbImage)
+        np.save(os.path.join(outputNpyDir, npyName), rgbImage)
         return True
 
     except Exception as e:
@@ -69,13 +67,9 @@ def process_sample(args):
         return False
 
     finally:
-        if os.path.exists(tmpFile):
-            try:
-                os.remove(tmpFile)
-            except OSError:
-                pass
+        shutil.rmtree(workDir, ignore_errors=True)
 
-def process_dataset(df, outputNpyDir, max_samples=20):
+def process_dataset(df, outputNpyDir, max_samples=10000):
 
     """
     Processes the entire csv dataset file by looping inside with row and columns.
@@ -100,7 +94,9 @@ def process_dataset(df, outputNpyDir, max_samples=20):
         df["func_before"].notna() &
         df["func_before"].apply(lambda s: isinstance(s, str) and len(s.strip()) > 0)
     ].copy()
+
     valid["label_idx"] = pd.to_numeric(valid["vul"], errors="coerce").fillna(0).astype(int)
+    
     valid["label_idx"] = (valid["label_idx"] == 1).astype(int)
 
     df0 = valid[valid["label_idx"] == 0]
@@ -134,7 +130,6 @@ def process_dataset(df, outputNpyDir, max_samples=20):
             int(row["label_idx"]),
             outputNpyDir,
             tmpDir,
-            workers
         )
         for _, row in dfSub.iterrows()
     ]

@@ -156,6 +156,16 @@ def joernPipeline(source, workDir="."):
     ddgDir = os.path.join(workDir, "export_ddg")
     outDir = os.path.join(workDir, "out")
     
+    if os.path.exists(cpgPath):                 # For safety reasons
+        print(f"[Debug] cpgPath size: {os.path.getsize(cpgPath)} bytes")
+        try:
+            if os.path.isdir(cpgPath):
+                shutil.rmtree(cpgPath)
+            else:
+                os.remove(cpgPath)
+        except Exception as e:
+            print(f"[-] Warning: Could not delete {cpgPath}: {e}")
+    
     for d in [cdgDir, ddgDir, outDir]:
         if os.path.exists(d):
             try:
@@ -207,12 +217,6 @@ def joernPipeline(source, workDir="."):
     return True
 
 if __name__ == "__main__":
-    file = "test/vulnerable.c"
-
-    if not os.path.exists(file):
-        print(f"[-] Error: {file} not found.")
-        exit(1)
-
     success = joernPipeline(file)
 
     if success:
