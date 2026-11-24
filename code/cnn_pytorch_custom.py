@@ -152,6 +152,8 @@ def evaluate_model(model, X_test, Y_true, eval_batch_size):
                     f"Non-Vulnerable: {nonVul:.2f}% | Vulnerable: {vul:.2f}%"
                 )
             
+            sample_offset += len(inputs)
+            
             cm = confusion_matrix(labels.cpu(), predicted.cpu())
             tn, fp, fn, tp = cm.ravel()
             accuracy = accuracy_score(labels.cpu(), predicted.cpu())
