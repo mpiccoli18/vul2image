@@ -127,6 +127,7 @@ def evaluate_model(model, X_test, Y_true, eval_batch_size):
     total_fp = 0
     total_fn = 0
 
+    sample_offset = 0
 
     with torch.no_grad():
         for inputs, labels in test_loader:
@@ -134,6 +135,23 @@ def evaluate_model(model, X_test, Y_true, eval_batch_size):
             #inputs = inputs.permute(0, 3, 1, 2)
             outputs = model(inputs)
             _, predicted = torch.max(outputs, 1)
+            
+            for i in range(len(inputs)):
+                nonVul = probs[i, 0].item() * 100.0
+                vul = probs[i, 1].item() * 100.0
+                trueLabel = int(labels[i].item())
+                predLabel = int(predicted[i].item())
+
+                if test_names is not None and sample_offset + i < len(test_names):
+                    img_label = test_names[sample_offset + i]
+                else:
+                    img_label = f"sample_{sample_offset + i}"
+
+                print(
+                    f"[{img_label}] True: {trueLabel} | Pred: {predLabel} -> "
+                    f"Non-Vulnerable: {nonVul:.2f}% | Vulnerable: {vul:.2f}%"
+                )
+            
             cm = confusion_matrix(labels.cpu(), predicted.cpu())
             tn, fp, fn, tp = cm.ravel()
             accuracy = accuracy_score(labels.cpu(), predicted.cpu())
