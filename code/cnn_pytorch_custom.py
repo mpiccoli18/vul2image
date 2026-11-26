@@ -110,7 +110,7 @@ def train_model(model, X_train, Y_train, batch_size, epochs):
 
 
 # Confusion matrix
-def evaluate_model(model, X_test, Y_true, eval_batch_size):
+def evaluate_model(model, X_test, Y_true, eval_batch_size, test_names=None):
     global average_ACC, average_TPR, average_TNR, average_Precision, cost_time
     model.eval()
     model.to(device)
@@ -126,6 +126,7 @@ def evaluate_model(model, X_test, Y_true, eval_batch_size):
     total_tn = 0
     total_fp = 0
     total_fn = 0
+    total_f1 = 0
 
     sample_offset = 0
 
@@ -134,6 +135,7 @@ def evaluate_model(model, X_test, Y_true, eval_batch_size):
             inputs, labels = inputs.to(device), labels.to(device)
             #inputs = inputs.permute(0, 3, 1, 2)
             outputs = model(inputs)
+            probs = F.softmax(outputs, dim=1)
             _, predicted = torch.max(outputs, 1)
             
             for i in range(len(inputs)):
@@ -154,12 +156,14 @@ def evaluate_model(model, X_test, Y_true, eval_batch_size):
             
             sample_offset += len(inputs)
             
-            cm = confusion_matrix(labels.cpu(), predicted.cpu())
+            cm = confusion_matrix(labels.cpu(), predicted.cpu(), labels=[0, 1])
             tn, fp, fn, tp = cm.ravel()
             accuracy = accuracy_score(labels.cpu(), predicted.cpu())
-            tpr = tp / (tp + fn)
-            tnr = tn / (tn + fp)
-            precision = tp / (tp + fp)
+            tpr = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            tnr = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            recall = tpr
+            f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
             total_accuracy += accuracy * len(inputs)
             total_tpr += tpr * len(inputs)
@@ -169,16 +173,41 @@ def evaluate_model(model, X_test, Y_true, eval_batch_size):
             total_tn += tn
             total_fp += fp
             total_fn += fn
+            total_f1 += f1 * len(inputs)
 
-    average_ACC += total_accuracy / len(X_test)
-    average_TPR += total_tpr / len(X_test)
-    average_TNR += total_tnr / len(X_test)
-    average_Precision = total_precision / len(X_test)
-    print(f"Accuracy: {total_accuracy / len(X_test):.4f}")
-    print(f"TPR: {total_tpr / len(X_test):.4f}")
-    print(f"TNR: {total_tnr / len(X_test):.4f}")
-    print(f"Precision: {total_precision / len(X_test):.4f}")
+    test_acc = total_accuracy / len(X_test)
+    test_tpr = total_tpr / len(X_test)
+    test_tnr = total_tnr / len(X_test)
+    test_precision = total_precision / len(X_test)
+    test_avg_f1 = total_f1 / len(X_test)
 
+    # Overall (micro / full-set) precision, recall, and F1 from total counts:
+    overall_precision = (
+        total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0.0
+    )
+    overall_recall = (
+        total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0.0
+    )
+    overall_f1 = (
+        (2 * overall_precision * overall_recall)
+        / (overall_precision + overall_recall)
+        if (overall_precision + overall_recall) > 0
+        else 0.0
+    )
+
+    average_ACC += test_acc
+    average_TPR += test_tpr
+    average_TNR += test_tnr
+    average_Precision += test_precision
+
+    print(f"Accuracy: {test_acc:.4f}")
+    print(f"TPR / Recall (batch-weighted): {test_tpr:.4f}")
+    print(f"TNR: {test_tnr:.4f}")
+    print(f"Precision (batch-weighted): {test_precision:.4f}")
+    print(f"F1 (batch-weighted): {test_avg_f1:.4f}")
+    print(f"Overall Recall: {overall_recall:.4f}")
+    print(f"Overall Precision: {overall_precision:.4f}")
+    print(f"Overall F1: {overall_f1:.4f}")
     print(f"tp: {total_tp}")
     print(f"tn: {total_tn}")
     print(f"fp: {total_fp}")
@@ -219,6 +248,7 @@ def LoadFile(FilePath):
 def GetDirAllFile(FilePath):
     train_x = []
     train_y = []
+    file_names = []
     for root, dirs, files in os.walk(FilePath):
         for file in files:
             path = os.path.join(root, file)
@@ -229,6 +259,7 @@ def GetDirAllFile(FilePath):
                 elif '_1.npy' in path:
                     train_y.append(1)
                 train_x.append(x)
+                file_names.append(file)
 
 
 
@@ -237,17 +268,23 @@ def GetDirAllFile(FilePath):
     #train_y = torch.tensor(train_y, dtype=torch.long)
     train_x = np.array(train_x)
     train_y = np.array(train_y)
-    return train_x, train_y
+    file_names = np.array(file_names)
+    return train_x, train_y, file_names
 
 def main(TrainFilePath):
     all_evaluate_time = 0
-    X, Y = GetDirAllFile(TrainFilePath)  # x is the image NumPy array; y is the label NumPy array
+    X, Y, names = GetDirAllFile(TrainFilePath)  # x is the image NumPy array; y is the label NumPy array
+
+    print(f"Loaded X: {len(X)}, Y: {len(Y)} | Class 0: {(Y == 0).sum()},"f" Class 1: {(Y == 1).sum()}")
+    
     kf = KFold(5, shuffle=True, random_state=1)
 
 
     for train_index, test_index in kf.split(X):
         X_train, X_test = X[train_index], X[test_index]
         Y_train, Y_test = Y[train_index], Y[test_index]
+        names_test = names[test_index]
+
         X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
         Y_train_tensor = torch.tensor(Y_train, dtype=torch.long)
         X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
@@ -258,7 +295,7 @@ def main(TrainFilePath):
         train_model(model, X_train_tensor, Y_train_tensor, train_batch_size, num_epochs)
 
         start_time = time.time()
-        evaluate_model(model, X_test_tensor, Y_test_tensor, eval_batch_size)
+        evaluate_model(model, X_test_tensor, Y_test_tensor, eval_batch_size, test_names=names_test)
         end_time = time.time()
         all_evaluate_time += end_time - start_time
 

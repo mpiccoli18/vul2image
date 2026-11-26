@@ -196,7 +196,7 @@ def joernPipeline(source, workDir="."):
     print("[+] Parsing complete. CPG generated successfully.")
     
     # Export Control Dependency Graph (CDG)
-    parse = subprocess.run([JOERN_EXPORT, cpgPath, "--repr", "cdg", "--format", "dot", "--out", cdgDir], cwd=workDir, capture_output=True, text=True, shell=False)
+    parse = subprocess.run([JOERN_EXPORT, cpgPath, "--repr", "cdg", "--format", "dot", "--out", cdgDir], cwd=workDir, capture_output=True, text=True, shell=False) # Shell = False on Linux, Shell = True on Windows
     
     if parse.returncode != 0:
         print(f"[-] Joern CDG export failed with exit code {parse.returncode}")
@@ -205,7 +205,7 @@ def joernPipeline(source, workDir="."):
         return False
     
     # Export Data Dependency Graph (DDG)
-    parse = subprocess.run([JOERN_EXPORT, cpgPath, "--repr", "ddg", "--format", "dot", "--out", ddgDir], cwd=workDir, capture_output=True, text=True, shell=False)
+    parse = subprocess.run([JOERN_EXPORT, cpgPath, "--repr", "ddg", "--format", "dot", "--out", ddgDir], cwd=workDir, capture_output=True, text=True, shell=False) # Shell = False on Linux, Shell = True on Windows
 
     if parse.returncode != 0:
         print(f"[-] Joern DDG export failed with exit code {parse.returncode}")

@@ -215,7 +215,7 @@ if __name__ == "__main__":
     # Folder where all .npy tensors are stored
     OUTPUT_NPY_DIR = "output/dataset_output"
     
-    #download_dataset()             # Only if you don't have downloaded yet BigVul
+    #download_dataset()             # Only if you don't have already downloaded BigVul
     
     df = load_dataset(DATASET_ROOT)
     
